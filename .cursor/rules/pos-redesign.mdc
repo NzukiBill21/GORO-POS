@@ -1,0 +1,18 @@
+---
+description: POS + checkout UI redesign guardrails (Stage 8 slice)
+globs:
+  - src/pages/POSPage.tsx
+  - src/components/pos/**
+  - src/lib/motion.ts
+---
+
+# POS redesign rules
+
+- **Direction:** Follow [docs/POS_UI_DIRECTION.md](../../docs/POS_UI_DIRECTION.md) — retail clarity, works first, money obvious, calm motion.
+- **Scope:** Visual layout, CSS, and motion only unless the user explicitly asks for behavior changes.
+- **Frozen:** `PosCheckoutDialog` props, `PayPhase` state machine, and API paths in [docs/PILOT_SMOKE.md](../../docs/PILOT_SMOKE.md).
+- **After each wave:** run `npm run check:redesign` (test + build).
+- **Manual:** run PILOT_SMOKE checklist before calling POS work done.
+- **Ports:** Dev UI at 127.0.0.1:5173 only; do not document mixed browser URLs for shop (3001 packaged).
+- **Branding:** Tenant POS uses Goro assets only; Gorovian logo is platform routes only.
+- **Motion:** Use tokens from `src/lib/motion.ts`; respect `prefers-reduced-motion`; no blocking animations during STK `waiting_customer`.

@@ -1,0 +1,1319 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Business & Organization ───────────────────────────────────────────────
+
+model Business {
+  id          String   @id @default(uuid())
+  name        String
+  legalName   String?
+  email       String?
+  phone       String?
+  address     String?
+  city        String?
+  country     String?
+  taxId           String?  // stored encrypted at application layer when set
+  taxIdEncrypted  String?
+  logo        String?
+  currency    String   @default("KES")
+  timezone    String   @default("UTC")
+  status              String   @default("ACTIVE") // ACTIVE, SUSPENDED, TRIAL
+  billingOwnerUserId  String?
+  billingPhone        String?  // M-Pesa number for subscription auto-renewal (2547XXXXXXXX)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  billingOwner        User?    @relation("BillingOwner", fields: [billingOwnerUserId], references: [id], onDelete: SetNull)
+  branches    Branch[]
+  users       User[]
+  settings    Settings[]
+  categories  Category[]
+  brands      Brand[]
+  units       Unit[]
+  products    Product[]
+  customers   Customer[]
+  suppliers   Supplier[]
+  warehouses  Warehouse[]
+  taxes       Tax[]
+  expenses    Expense[]
+  backups     Backup[]
+  sessions    Session[]
+  securityEvents SecurityEvent[]
+  inventoryApprovals InventoryApproval[]
+  subscriptions OrganizationSubscription[]
+  billingContacts BillingContact[]
+  billingInvoices BillingInvoice[]
+  billingPayments BillingPayment[]
+  notifications Notification[]
+  usageCounters UsageCounter[]
+  posPaymentConfig TenantPosPaymentConfig?
+  posMpesaStkRecords PosMpesaStkRecord[]
+  cashShifts CashShift[]
+  mpesaReconciliations MpesaReconciliationBatch[]
+  pilotGrant           BusinessPilotGrant?
+  shopImportBatches    ShopImportBatch[]
+  userInvitations      UserInvitation[]
+}
+
+model BusinessRegistrationPending {
+  id           String   @id @default(uuid())
+  email        String
+  businessName String
+  firstName    String
+  lastName     String
+  codeHash     String
+  tokenHash    String   @unique
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+
+  @@index([email])
+  @@index([expiresAt])
+}
+
+model UserInvitation {
+  id                        String    @id @default(uuid())
+  businessId                String
+  userId                    String
+  email                     String
+  roleId                    String
+  inviteType                String    // OWNER_SETUP, EMPLOYEE
+  tokenHash                 String    @unique
+  codeHash                  String?
+  invitedByUserId           String?
+  invitedByPlatformUserId   String?
+  expiresAt                 DateTime
+  acceptedAt                DateTime?
+  emailSentAt               DateTime?
+  emailDeliveryError        String?
+  createdAt                 DateTime  @default(now())
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([businessId])
+  @@index([userId])
+  @@index([email])
+}
+
+model Branch {
+  id          String   @id @default(uuid())
+  businessId  String
+  name        String
+  address     String?
+  phone       String?
+  email       String?
+  isActive    Boolean  @default(true)
+  isDefault   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  business    Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  users       User[]
+  sales       Sale[]
+  purchases   Purchase[]
+  stocks      Stock[]
+  expenses    Expense[]
+
+  @@index([businessId])
+}
+
+// ─── Users & Auth ────────────────────────────────────────────────────────────
+
+model Role {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  description String?
+  isSystem    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  users       User[]
+  permissions RolePermission[]
+}
+
+model Permission {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  module      String
+  action      String
+  description String?
+  createdAt   DateTime @default(now())
+
+  roles       RolePermission[]
+  userGrants  UserPermission[]
+}
+
+model RolePermission {
+  roleId       String
+  permissionId String
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+}
+
+model User {
+  id            String    @id @default(uuid())
+  businessId    String
+  branchId      String?
+  roleId        String
+  email         String    @unique
+  passwordHash  String
+  firstName     String
+  lastName      String
+  phone         String?
+  avatar        String?
+  pin           String?
+  isActive            Boolean   @default(true)
+  failedLoginAttempts Int       @default(0)
+  lockedUntil         DateTime?
+  passwordChangedAt   DateTime?
+  forceLogoutAt       DateTime?
+  tokenVersion        Int       @default(0)
+  salaryEncrypted     String?
+  lastLoginAt         DateTime?
+  emailVerifiedAt     DateTime?
+  mustSetPassword     Boolean   @default(false)
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  business      Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  invitations   UserInvitation[]
+  branch        Branch?   @relation(fields: [branchId], references: [id])
+  role          Role      @relation(fields: [roleId], references: [id])
+  sales         Sale[]
+  purchases     Purchase[]
+  activityLogs  ActivityLog[]
+  auditLogs     AuditLog[]
+  expenses      Expense[]
+  sessions      Session[]
+  loginHistory  LoginHistory[]
+  passwordResets PasswordResetToken[]
+  inventoryApprovals InventoryApproval[] @relation("ApprovalRequester")
+  approvedInventory  InventoryApproval[] @relation("ApprovalReviewer")
+  userPermissions    UserPermission[]
+  billingContacts    BillingContact[]
+  ownedOrganizations Business[]          @relation("BillingOwner")
+  notificationPrefs  NotificationPreference[]
+
+  @@index([businessId])
+  @@index([branchId])
+}
+
+// ─── Products & Inventory ──────────────────────────────────────────────────
+
+model Category {
+  id          String    @id @default(uuid())
+  businessId  String
+  parentId    String?
+  name        String
+  description String?
+  image       String?
+  sortOrder   Int       @default(0)
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  business    Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  parent      Category? @relation("CategoryHierarchy", fields: [parentId], references: [id])
+  children    Category[] @relation("CategoryHierarchy")
+  products    Product[]
+
+  @@unique([businessId, name])
+  @@index([businessId])
+  @@index([parentId])
+}
+
+model Brand {
+  id          String   @id @default(uuid())
+  businessId  String
+  name        String
+  description String?
+  logo        String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  business    Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  products    Product[]
+
+  @@index([businessId])
+}
+
+model Unit {
+  id           String   @id @default(uuid())
+  businessId   String
+  name         String
+  abbreviation String
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  business     Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  products     Product[]
+
+  @@unique([businessId, name])
+  @@index([businessId])
+}
+
+model Product {
+  id              String    @id @default(uuid())
+  businessId      String
+  categoryId      String?
+  brandId         String?
+  supplierId      String?
+  unitId          String?
+  name            String
+  description     String?
+  sku             String?
+  barcode         String?
+  qrCode          String?
+  image           String?
+  costPrice       Float     @default(0)
+  sellingPrice    Float     @default(0)
+  wholesalePrice  Float?
+  taxGroupId      String?
+  unit            String    @default("pcs")
+  minStock        Int       @default(0)
+  trackStock      Boolean   @default(true)
+  trackSerial     Boolean   @default(false)
+  trackBatch      Boolean   @default(false)
+  trackExpiry     Boolean   @default(false)
+  isActive        Boolean   @default(true)
+  isFavorite      Boolean   @default(false)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  business        Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  category        Category? @relation(fields: [categoryId], references: [id])
+  brand           Brand?    @relation(fields: [brandId], references: [id])
+  supplier        Supplier? @relation(fields: [supplierId], references: [id])
+  unitRef         Unit?     @relation(fields: [unitId], references: [id])
+  taxGroup        Tax?      @relation(fields: [taxGroupId], references: [id])
+  variants        Variant[]
+  stocks          Stock[]
+  saleItems       SaleItem[]
+  purchaseItems   PurchaseItem[]
+
+  @@index([businessId])
+  @@index([sku])
+  @@index([barcode])
+  @@index([categoryId])
+}
+
+model Variant {
+  id           String   @id @default(uuid())
+  productId    String
+  name         String
+  sku          String?
+  barcode      String?
+  color        String?
+  size         String?
+  costPrice    Float?
+  sellingPrice Float?
+  image        String?
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  product      Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  stocks       Stock[]
+  saleItems    SaleItem[]
+
+  @@index([productId])
+}
+
+model Warehouse {
+  id          String   @id @default(uuid())
+  businessId  String
+  name        String
+  address     String?
+  isDefault   Boolean  @default(false)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  business    Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  stocks      Stock[]
+
+  @@index([businessId])
+}
+
+model Stock {
+  id           String    @id @default(uuid())
+  productId    String
+  variantId    String?
+  warehouseId  String
+  branchId     String?
+  quantity     Int       @default(0)
+  batchNumber  String?
+  serialNumber String?
+  expiryDate   DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  product      Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  variant      Variant?  @relation(fields: [variantId], references: [id])
+  warehouse    Warehouse @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
+  branch       Branch?   @relation(fields: [branchId], references: [id])
+  movements    StockMovement[]
+
+  @@index([productId])
+  @@index([warehouseId])
+  @@index([branchId])
+}
+
+model StockMovement {
+  id          String   @id @default(uuid())
+  stockId     String
+  type        String   // IN, OUT, TRANSFER, ADJUSTMENT, RETURN, DAMAGE
+  quantity    Int
+  reference   String?
+  notes       String?
+  createdBy   String?
+  createdAt   DateTime @default(now())
+
+  stock       Stock    @relation(fields: [stockId], references: [id], onDelete: Cascade)
+
+  @@index([stockId])
+  @@index([createdAt])
+}
+
+// ─── Customers & Suppliers ─────────────────────────────────────────────────
+
+model Customer {
+  id              String    @id @default(uuid())
+  businessId      String
+  firstName       String
+  lastName        String?
+  email           String?
+  phone           String?
+  address         String?
+  city            String?
+  birthday        DateTime?
+  notes           String?
+  creditLimit     Float     @default(0)
+  creditBalance   Float     @default(0)
+  loyaltyPoints   Int       @default(0)
+  isActive        Boolean   @default(true)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  business        Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  sales           Sale[]
+  giftCards       GiftCard[]
+
+  @@index([businessId])
+  @@index([phone])
+  @@index([email])
+}
+
+model Supplier {
+  id          String   @id @default(uuid())
+  businessId  String
+  name        String
+  contactName String?
+  email       String?
+  phone       String?
+  address     String?
+  notes       String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  business    Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  products    Product[]
+  purchases   Purchase[]
+
+  @@index([businessId])
+}
+
+// ─── Sales ─────────────────────────────────────────────────────────────────
+
+model Sale {
+  id              String    @id @default(uuid())
+  branchId        String
+  userId          String
+  customerId      String?
+  sessionId       String?
+  invoiceNumber   String    @unique
+  idempotencyKey  String?   @unique
+  status          String    @default("DRAFT") // DRAFT, PENDING_PAYMENT, COMPLETED, REFUNDED, VOIDED, HELD
+  subtotal        Float     @default(0)
+  discountAmount  Float     @default(0)
+  taxAmount       Float     @default(0)
+  total           Float     @default(0)
+  amountPaid      Float     @default(0)
+  changeAmount    Float     @default(0)
+  notes           String?
+  isOffline       Boolean   @default(false)
+  isDeleted       Boolean   @default(false)
+  voidedAt        DateTime?
+  refundedAt      DateTime?
+  syncedAt        DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  branch          Branch    @relation(fields: [branchId], references: [id])
+  user            User      @relation(fields: [userId], references: [id])
+  customer        Customer? @relation(fields: [customerId], references: [id])
+  items           SaleItem[]
+  payments        Payment[]
+  discounts       SaleDiscount[]
+  receipts        Receipt[]
+
+  @@index([branchId])
+  @@index([userId])
+  @@index([customerId])
+  @@index([status])
+  @@index([createdAt])
+  @@index([isDeleted])
+  @@index([idempotencyKey])
+}
+
+model SaleItem {
+  id           String  @id @default(uuid())
+  saleId       String
+  productId    String
+  variantId    String?
+  name         String
+  sku          String?
+  quantity     Int
+  unitPrice    Float
+  costPrice    Float   @default(0)
+  discount     Float   @default(0)
+  taxAmount    Float   @default(0)
+  total        Float
+  notes        String?
+
+  sale         Sale    @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  product      Product @relation(fields: [productId], references: [id])
+  variant      Variant? @relation(fields: [variantId], references: [id])
+
+  @@index([saleId])
+  @@index([productId])
+}
+
+model Receipt {
+  id            String   @id @default(uuid())
+  saleId        String
+  receiptNumber String   @unique
+  htmlContent   String?
+  printedAt     DateTime?
+  createdAt     DateTime @default(now())
+
+  sale          Sale     @relation(fields: [saleId], references: [id], onDelete: Cascade)
+
+  @@index([saleId])
+  @@index([createdAt])
+}
+
+model Payment {
+  id          String   @id @default(uuid())
+  saleId      String?
+  purchaseId  String?
+  businessId  String?
+  method      String   // CASH, CARD, MPESA_STK, MPESA_MANUAL, MOBILE, BANK, CREDIT, GIFT_CARD
+  amount      Float
+  amountCents Int?
+  tenderedCents Int?
+  status      String   @default("COMPLETED") // PENDING, COMPLETED, FAILED, TIMEOUT, CANCELLED, MANUAL_UNVERIFIED
+  verificationStatus String? // VERIFIED, UNVERIFIED, REJECTED
+  reference   String?
+  notes       String?
+  mpesaPhone  String?
+  mpesaCheckoutRequestId String?
+  mpesaReceiptNumber     String?
+  manualTransactionCode  String?
+  manualSenderPhone      String?
+  cardTerminalRef        String?
+  cardLast4              String?
+  approvedByUserId       String?
+  splitGroupId           String?
+  mpesaStkIdempotencyKey String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @default(now()) @updatedAt
+
+  sale        Sale?    @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  purchase    Purchase? @relation(fields: [purchaseId], references: [id])
+
+  @@unique([businessId, manualTransactionCode])
+  @@unique([mpesaStkIdempotencyKey])
+  @@index([saleId])
+  @@index([businessId])
+  @@index([status])
+  @@index([mpesaCheckoutRequestId])
+}
+
+// ─── Purchases ─────────────────────────────────────────────────────────────
+
+model Purchase {
+  id              String   @id @default(uuid())
+  branchId        String
+  supplierId      String
+  userId          String
+  orderNumber     String   @unique
+  status          String   @default("PENDING") // PENDING, RECEIVED, PARTIAL, CANCELLED
+  subtotal        Float    @default(0)
+  taxAmount       Float    @default(0)
+  total           Float    @default(0)
+  amountPaid      Float    @default(0)
+  notes           String?
+  expectedDate    DateTime?
+  receivedDate    DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  branch          Branch   @relation(fields: [branchId], references: [id])
+  supplier        Supplier @relation(fields: [supplierId], references: [id])
+  user            User     @relation(fields: [userId], references: [id])
+  items           PurchaseItem[]
+  payments        Payment[]
+
+  @@index([branchId])
+  @@index([supplierId])
+  @@index([status])
+}
+
+model PurchaseItem {
+  id           String  @id @default(uuid())
+  purchaseId   String
+  productId    String
+  quantity     Int
+  unitCost     Float
+  taxAmount    Float   @default(0)
+  total        Float
+  receivedQty  Int     @default(0)
+
+  purchase     Purchase @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  product      Product  @relation(fields: [productId], references: [id])
+
+  @@index([purchaseId])
+}
+
+// ─── Financials ────────────────────────────────────────────────────────────
+
+model Expense {
+  id          String   @id @default(uuid())
+  businessId  String
+  branchId    String?
+  userId      String
+  category    String
+  amount      Float
+  description String?
+  reference   String?
+  date        DateTime @default(now())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  business    Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  branch      Branch?  @relation(fields: [branchId], references: [id])
+  user        User     @relation(fields: [userId], references: [id])
+
+  @@index([businessId])
+  @@index([date])
+}
+
+model Tax {
+  id          String   @id @default(uuid())
+  businessId  String
+  name        String
+  rate        Float
+  isInclusive Boolean  @default(false)
+  isDefault   Boolean  @default(false)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  business    Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  products    Product[]
+
+  @@index([businessId])
+}
+
+model Discount {
+  id          String    @id @default(uuid())
+  name        String
+  code        String?   @unique
+  type        String    // PERCENTAGE, FIXED
+  value       Float
+  minAmount   Float?
+  maxUses     Int?
+  usedCount   Int       @default(0)
+  startDate   DateTime?
+  endDate     DateTime?
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  saleDiscounts SaleDiscount[]
+}
+
+model SaleDiscount {
+  id         String   @id @default(uuid())
+  saleId     String
+  discountId String?
+  name       String
+  type       String
+  value      Float
+  amount     Float
+
+  sale       Sale     @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  discount   Discount? @relation(fields: [discountId], references: [id])
+
+  @@index([saleId])
+}
+
+model GiftCard {
+  id          String    @id @default(uuid())
+  customerId  String?
+  code        String    @unique
+  balance     Float
+  initialValue Float
+  isActive    Boolean   @default(true)
+  expiresAt   DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  customer    Customer? @relation(fields: [customerId], references: [id])
+}
+
+// ─── System ────────────────────────────────────────────────────────────────
+
+model Settings {
+  id          String   @id @default(uuid())
+  businessId  String
+  key         String
+  value       String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  business    Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@unique([businessId, key])
+  @@index([businessId])
+}
+
+model ActivityLog {
+  id          String   @id @default(uuid())
+  userId      String?
+  action      String
+  module      String
+  entityId    String?
+  details     String?
+  ipAddress   String?
+  createdAt   DateTime @default(now())
+
+  user        User?    @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([module])
+  @@index([createdAt])
+}
+
+// Immutable audit trail — append-only, never update or delete
+model AuditLog {
+  id             String   @id @default(uuid())
+  userId         String?
+  sessionId      String?
+  action         String
+  module         String
+  entityId       String?
+  previousValues String?
+  newValues      String?
+  details        String?
+  ipAddress      String?
+  userAgent      String?
+  device         String?
+  prevHash       String?
+  entryHash      String?
+  createdAt      DateTime @default(now())
+
+  user           User?    @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([sessionId])
+  @@index([module])
+  @@index([action])
+  @@index([createdAt])
+}
+
+model Session {
+  id               String   @id @default(uuid())
+  userId           String
+  businessId       String
+  refreshTokenHash String   @unique
+  device           String?
+  userAgent        String?
+  ipAddress        String?
+  isActive         Boolean  @default(true)
+  lastActivityAt   DateTime @default(now())
+  expiresAt        DateTime
+  createdAt        DateTime @default(now())
+
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  business         Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([businessId])
+  @@index([isActive])
+  @@index([expiresAt])
+}
+
+model LoginHistory {
+  id        String   @id @default(uuid())
+  userId    String?
+  email     String
+  success   Boolean
+  ipAddress String?
+  userAgent String?
+  device    String?
+  reason    String?
+  createdAt DateTime @default(now())
+
+  user      User?    @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([email])
+  @@index([createdAt])
+}
+
+model PasswordResetToken {
+  id        String   @id @default(uuid())
+  userId    String
+  tokenHash String   @unique
+  codeHash  String?  @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([tokenHash])
+  @@index([codeHash])
+}
+
+model SecurityEvent {
+  id         String   @id @default(uuid())
+  businessId String
+  userId     String?
+  type       String   // LOGIN_FAILED, ACCOUNT_LOCKED, FORCE_LOGOUT, PERMISSION_DENIED, SUSPICIOUS_ACTIVITY
+  severity   String   @default("INFO") // INFO, WARNING, CRITICAL
+  message    String
+  metadata   String?
+  ipAddress  String?
+  createdAt  DateTime @default(now())
+
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@index([businessId])
+  @@index([type])
+  @@index([createdAt])
+}
+
+model InventoryApproval {
+  id          String   @id @default(uuid())
+  businessId  String
+  requesterId String
+  reviewerId  String?
+  type        String   // ADJUSTMENT, TRANSFER, CORRECTION, DELETE
+  productId   String?
+  payload     String
+  reason      String
+  status      String   @default("PENDING") // PENDING, APPROVED, REJECTED
+  reviewNotes String?
+  createdAt   DateTime @default(now())
+  reviewedAt  DateTime?
+
+  business    Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  requester   User     @relation("ApprovalRequester", fields: [requesterId], references: [id])
+  reviewer    User?    @relation("ApprovalReviewer", fields: [reviewerId], references: [id])
+
+  @@index([businessId])
+  @@index([status])
+  @@index([requesterId])
+}
+
+model Notification {
+  id              String    @id @default(uuid())
+  businessId      String?
+  recipientUserId String?
+  type            String
+  title           String
+  message         String
+  severity        String    @default("INFO") // INFO, WARNING, CRITICAL
+  entityType      String?
+  entityId        String?
+  isRead          Boolean   @default(false)
+  readAt          DateTime?
+  data            String?
+  createdAt       DateTime  @default(now())
+
+  business        Business? @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@index([businessId])
+  @@index([recipientUserId])
+  @@index([isRead])
+  @@index([type])
+}
+
+model Backup {
+  id          String   @id @default(uuid())
+  businessId  String
+  filename    String
+  filepath    String?
+  size        Int
+  type        String   // DAILY, WEEKLY, MONTHLY, MANUAL
+  schedule    String?  // daily, weekly, monthly
+  checksum    String?
+  status      String   @default("COMPLETED")
+  createdAt   DateTime @default(now())
+
+  business    Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@index([businessId])
+  @@index([type])
+  @@index([createdAt])
+}
+
+model SyncQueue {
+  id          String   @id @default(uuid())
+  entity      String
+  entityId    String
+  action      String   // CREATE, UPDATE, DELETE
+  payload     String
+  status      String   @default("PENDING") // PENDING, SYNCED, FAILED
+  retries     Int      @default(0)
+  createdAt   DateTime @default(now())
+  syncedAt    DateTime?
+
+  @@index([status])
+  @@index([createdAt])
+}
+
+// ─── Platform (GOROVIAN ADMIN) ───────────────────────────────────────────────
+
+model PlatformUser {
+  id            String    @id @default(uuid())
+  email         String    @unique
+  passwordHash  String
+  firstName     String
+  lastName      String
+  role          String    @default("platform_admin")
+  isActive      Boolean   @default(true)
+  mfaEnabled    Boolean   @default(false)
+  lastLoginAt   DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  sessions      PlatformSession[]
+  auditLogs     PlatformAuditLog[]
+}
+
+model PlatformAuditLog {
+  id               String   @id @default(uuid())
+  platformUserId   String
+  action           String
+  targetBusinessId String?
+  reason           String?
+  details          String?
+  ipAddress        String?
+  createdAt        DateTime @default(now())
+
+  platformUser PlatformUser @relation(fields: [platformUserId], references: [id], onDelete: Cascade)
+
+  @@index([platformUserId])
+  @@index([targetBusinessId])
+  @@index([createdAt])
+}
+
+model PlatformSession {
+  id               String   @id @default(uuid())
+  platformUserId   String
+  refreshTokenHash String   @unique
+  device           String?
+  userAgent        String?
+  ipAddress        String?
+  isActive         Boolean  @default(true)
+  lastActivityAt   DateTime @default(now())
+  expiresAt        DateTime
+  createdAt        DateTime @default(now())
+
+  platformUser     PlatformUser @relation(fields: [platformUserId], references: [id], onDelete: Cascade)
+
+  @@index([platformUserId])
+  @@index([isActive])
+}
+
+// ─── User permission grants (Supervisor custom permissions) ──────────────────
+
+model UserPermission {
+  userId       String
+  permissionId String
+  grantedBy    String?
+  grantedAt    DateTime @default(now())
+
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([userId, permissionId])
+  @@index([userId])
+}
+
+// ─── Subscription & Billing (SaaS — separate from POS payments) ──────────────
+
+model Plan {
+  id          String   @id @default(uuid())
+  code        String   @unique // REGULAR, BUSINESS, PRO, ENTERPRISE
+  name        String
+  description String?
+  isActive    Boolean  @default(true)
+  isCustom    Boolean  @default(false)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  prices      PlanPrice[]
+  features    PlanFeature[]
+  subscriptions OrganizationSubscription[]
+  pilotGrants   BusinessPilotGrant[]
+}
+
+model BusinessPilotGrant {
+  id                        String    @id @default(uuid())
+  businessId                String    @unique
+  planId                    String
+  active                    Boolean   @default(true)
+  notes                     String?
+  grantedAt                 DateTime  @default(now())
+  grantedByPlatformUserId   String?
+  revokedAt                 DateTime?
+  revokedByPlatformUserId   String?
+  createdAt                 DateTime  @default(now())
+  updatedAt                 DateTime  @default(now()) @updatedAt
+
+  business                  Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  plan                      Plan      @relation(fields: [planId], references: [id])
+
+  @@index([active])
+}
+
+model PlanPrice {
+  id              String   @id @default(uuid())
+  planId          String
+  billingInterval String   // MONTHLY, ANNUAL
+  amountCents     Int      // KES whole shillings stored as integer
+  currency        String   @default("KES")
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  plan            Plan     @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@unique([planId, billingInterval, currency])
+  @@index([planId])
+}
+
+model PlanFeature {
+  id        String @id @default(uuid())
+  planId    String
+  feature   String // max_users, max_branches, advanced_analytics, etc.
+  value     String // numeric limit or "true"/"false"
+
+  plan      Plan   @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@unique([planId, feature])
+  @@index([planId])
+}
+
+model OrganizationSubscription {
+  id                  String    @id @default(uuid())
+  businessId          String
+  planId              String
+  billingInterval     String    // MONTHLY, ANNUAL
+  status              String    @default("TRIALING") // TRIALING, ACTIVE, PAST_DUE, GRACE_PERIOD, SUSPENDED, CANCELLED, EXPIRED
+  customAmountCents   Int?      // Enterprise negotiated price
+  currentPeriodStart  DateTime?
+  currentPeriodEnd    DateTime?
+  cancelAtPeriodEnd   Boolean   @default(false)
+  trialEndsAt         DateTime?
+  gracePeriodEndsAt   DateTime?
+  autoRenew           Boolean   @default(true)
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  business            Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  plan                Plan      @relation(fields: [planId], references: [id])
+  events              SubscriptionEvent[]
+  invoices            BillingInvoice[]
+
+  @@index([businessId])
+  @@index([status])
+  @@index([planId])
+}
+
+model SubscriptionEvent {
+  id             String   @id @default(uuid())
+  subscriptionId String
+  eventType      String
+  previousStatus String?
+  newStatus      String?
+  metadata       String?
+  actorUserId    String?
+  createdAt      DateTime @default(now())
+
+  subscription   OrganizationSubscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+
+  @@index([subscriptionId])
+  @@index([eventType])
+}
+
+model BillingContact {
+  id         String   @id @default(uuid())
+  businessId String
+  userId     String
+  role       String   @default("SECONDARY") // PRIMARY, SECONDARY
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([businessId, userId])
+  @@index([businessId])
+}
+
+model BillingInvoice {
+  id             String   @id @default(uuid())
+  businessId     String
+  subscriptionId String?
+  invoiceNumber  String   @unique
+  status         String   @default("DRAFT") // DRAFT, OPEN, PAID, VOID, UNCOLLECTIBLE
+  subtotalCents  Int
+  taxCents       Int      @default(0)
+  totalCents     Int
+  currency       String   @default("KES")
+  periodStart    DateTime?
+  periodEnd      DateTime?
+  dueDate        DateTime?
+  paidAt         DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  business       Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  subscription   OrganizationSubscription? @relation(fields: [subscriptionId], references: [id])
+  items          BillingInvoiceItem[]
+  payments       BillingPayment[]
+
+  @@index([businessId])
+  @@index([status])
+}
+
+model BillingInvoiceItem {
+  id          String @id @default(uuid())
+  invoiceId   String
+  description String
+  quantity    Int    @default(1)
+  unitCents   Int
+  totalCents  Int
+
+  invoice     BillingInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([invoiceId])
+}
+
+model BillingPayment {
+  id            String   @id @default(uuid())
+  businessId    String
+  invoiceId     String?
+  amountCents   Int
+  currency      String   @default("KES")
+  status        String   @default("PENDING") // PENDING, SUCCEEDED, FAILED, REFUNDED
+  provider      String   @default("MPESA")
+  providerRef   String?
+  providerCheckoutId String? // M-Pesa CheckoutRequestID for STK callback mapping
+  failureReason String?
+  paidAt        DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  business      Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  invoice       BillingInvoice? @relation(fields: [invoiceId], references: [id])
+  attempts      BillingPaymentAttempt[]
+  providerTx    PaymentProviderTransaction[]
+
+  @@index([businessId])
+  @@index([status])
+  @@index([invoiceId])
+}
+
+model BillingPaymentAttempt {
+  id            String   @id @default(uuid())
+  paymentId     String
+  status        String
+  failureReason String?
+  attemptedAt   DateTime @default(now())
+
+  payment       BillingPayment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+
+  @@index([paymentId])
+}
+
+model PaymentProviderTransaction {
+  id                    String   @id @default(uuid())
+  paymentId             String
+  provider              String
+  providerTransactionId String
+  status                String
+  rawPayload            String?
+  processedAt           DateTime @default(now())
+
+  payment               BillingPayment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerTransactionId])
+  @@index([paymentId])
+}
+
+model UsageCounter {
+  id         String   @id @default(uuid())
+  businessId String
+  metric     String   // users, branches, products, monthly_transactions
+  value      Int      @default(0)
+  periodKey  String   // e.g. 2026-08 for monthly metrics
+  updatedAt  DateTime @updatedAt
+
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@unique([businessId, metric, periodKey])
+  @@index([businessId])
+}
+
+model NotificationPreference {
+  id            String  @id @default(uuid())
+  userId        String
+  notificationType String
+  inAppEnabled  Boolean @default(true)
+  emailEnabled  Boolean @default(false)
+  smsEnabled    Boolean @default(false)
+  pushEnabled   Boolean @default(false)
+
+  user          User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, notificationType])
+  @@index([userId])
+}
+
+// ─── In-store POS payments (Kenya retail) — separate from SaaS BillingPayment ─
+
+model TenantPosPaymentConfig {
+  businessId                   String   @id
+  enabledMethodsJson           String   @default("{\"cash\":true,\"mpesa_stk\":true,\"mpesa_manual\":true,\"card\":true,\"split\":true}")
+  mpesaShortcodeEncrypted      String?
+  mpesaTillEncrypted           String?
+  mpesaConsumerKeyEncrypted    String?
+  mpesaConsumerSecretEncrypted String?
+  mpesaPasskeyEncrypted        String?
+  mpesaCallbackUrl             String?
+  manualApprovalThresholdCents Int      @default(50000)
+  defaultTillFloatCents        Int      @default(500000)
+  createdAt                    DateTime @default(now())
+  updatedAt                    DateTime @updatedAt
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+}
+
+model PosMpesaStkRecord {
+  id                    String   @id @default(uuid())
+  businessId            String
+  saleId                String
+  paymentId             String
+  checkoutRequestId     String   @unique
+  providerTransactionId String?  @unique
+  amountCents           Int
+  phone                 String
+  status                String   @default("WAITING") // WAITING, PAID, CANCELLED, TIMEOUT, FAILED
+  rawPayload            String?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@index([saleId])
+  @@index([paymentId])
+  @@index([businessId])
+}
+
+model ShopImportBatch {
+  id             String   @id @default(uuid())
+  businessId     String
+  type           String   // PRODUCTS, OPENING_STOCK
+  idempotencyKey String
+  filename       String?
+  status         String   @default("COMPLETED")
+  summaryJson    String?
+  createdBy      String?
+  createdAt      DateTime @default(now())
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@unique([businessId, type, idempotencyKey])
+  @@index([businessId])
+}
+
+model CashShift {
+  id                 String    @id @default(uuid())
+  businessId         String
+  branchId           String
+  userId             String
+  status             String    @default("OPEN") // OPEN, CLOSED
+  openingFloatCents  Int       @default(0)
+  expectedCashCents  Int       @default(0)
+  countedCashCents   Int?
+  varianceCents      Int?
+  openedAt           DateTime  @default(now())
+  closedAt           DateTime?
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@index([businessId])
+  @@index([branchId])
+  @@index([userId])
+}
+
+model MpesaReconciliationBatch {
+  id          String   @id @default(uuid())
+  businessId  String
+  uploadedBy  String
+  filename    String
+  matched     Int      @default(0)
+  unmatched   Int      @default(0)
+  createdAt   DateTime @default(now())
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  lines    MpesaReconciliationLine[]
+
+  @@index([businessId])
+}
+
+model MpesaReconciliationLine {
+  id              String  @id @default(uuid())
+  batchId         String
+  transactionCode String
+  amountCents     Int
+  phone           String?
+  matchedPaymentId String?
+  matchStatus     String  @default("UNMATCHED") // MATCHED, UNMATCHED
+
+  batch MpesaReconciliationBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+
+  @@index([batchId])
+  @@index([transactionCode])
+}

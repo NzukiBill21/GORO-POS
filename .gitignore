@@ -1,0 +1,20 @@
+node_modules/
+dist/
+dist-electron/
+release/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+.env
+.env.local
+.env.*
+!.env.example
+backups/
+shop.env
+**/shop.env
+GORO POS/
+.DS_Store
+Thumbs.db
+*.log
+data/receipt-archive/
