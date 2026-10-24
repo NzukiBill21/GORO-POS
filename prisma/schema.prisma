@@ -181,6 +181,8 @@ model User {
   lastLoginAt         DateTime?
   emailVerifiedAt     DateTime?
   mustSetPassword     Boolean   @default(false)
+  /** Local admin provisioned account — user may sign in but must change temp password first. */
+  mustChangePassword  Boolean   @default(false)
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
 

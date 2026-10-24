@@ -101,6 +101,7 @@ platformRouter.post(
         ownerFirstName: req.body.ownerFirstName,
         ownerLastName: req.body.ownerLastName,
         planCode: req.body.planCode,
+        ownerInitialPassword: req.body.ownerInitialPassword,
         platformUserId: req.platformUser!.platformUserId,
         ipAddress: meta.ipAddress,
       })

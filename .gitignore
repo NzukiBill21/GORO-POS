@@ -18,3 +18,4 @@ GORO POS/
 Thumbs.db
 *.log
 data/receipt-archive/
+tests/.tmp/

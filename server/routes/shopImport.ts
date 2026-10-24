@@ -1,10 +1,12 @@
 import { Router } from 'express';
 import { authenticate } from '../middleware/auth.js';
 import { requirePermission } from '../middleware/permissions.js';
+import { hasPermission } from '../lib/permissions.js';
 import { asyncHandler, AppError } from '../lib/errors.js';
 import {
   commitOpeningStockImport,
   commitProductImport,
+  normalizeImportMode,
   previewOpeningStockFromBuffer,
   previewProductsFromBuffer,
   validateOpeningStockRows,
@@ -30,7 +32,8 @@ shopImportRouter.post(
   requirePermission('products.create'),
   asyncHandler(async (req, res) => {
     const buffer = decodeWorkbook(req.body);
-    const preview = await previewProductsFromBuffer(req.user!.businessId, buffer);
+    const importMode = normalizeImportMode(req.body.importMode);
+    const preview = await previewProductsFromBuffer(req.user!.businessId, buffer, { importMode });
     res.json(preview);
   })
 );
@@ -52,13 +55,24 @@ shopImportRouter.post(
     const rows = (req.body.rows ?? []) as ParsedProductRow[];
     const idempotencyKey = String(req.body.idempotencyKey ?? '');
     const filename = req.body.filename as string | undefined;
+    const importMode = normalizeImportMode(req.body.importMode);
+    const partial = Boolean(req.body.partial);
+
+    if (
+      importMode === 'create-and-update' &&
+      !hasPermission(req.user!.role, 'products.edit', req.user!.permissions)
+    ) {
+      throw new AppError('Updating existing products requires products.edit permission', 403);
+    }
+
     if (!idempotencyKey.trim()) {
       throw new AppError('idempotencyKey is required for import commit', 400);
     }
     if (!rows.length) {
       throw new AppError('No product rows to import. Run preview first and fix row errors.', 400);
     }
-    const preview = await validateProductRows(req.user!.businessId, rows);
+
+    const preview = await validateProductRows(req.user!.businessId, rows, { importMode });
     if (preview.errors.length) {
       res.status(400).json({
         error: `Validation failed (${preview.errors.length} row(s))`,
@@ -67,12 +81,15 @@ shopImportRouter.post(
       });
       return;
     }
+
     const result = await commitProductImport({
       businessId: req.user!.businessId,
       userId: req.user!.userId,
       idempotencyKey,
       filename,
-      rows: preview.valid,
+      rows,
+      importMode,
+      partial,
     });
     res.json(result);
   })
@@ -85,6 +102,7 @@ shopImportRouter.post(
     const rows = (req.body.rows ?? []) as ParsedOpeningStockRow[];
     const idempotencyKey = String(req.body.idempotencyKey ?? '');
     const filename = req.body.filename as string | undefined;
+    const partial = Boolean(req.body.partial);
     const preview = await validateOpeningStockRows(req.user!.businessId, rows);
     if (!idempotencyKey.trim()) {
       throw new AppError('idempotencyKey is required for import commit', 400);
@@ -104,6 +122,7 @@ shopImportRouter.post(
       idempotencyKey,
       filename,
       rows: preview.valid,
+      partial,
     });
     res.json(result);
   })

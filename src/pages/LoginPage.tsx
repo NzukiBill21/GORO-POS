@@ -23,7 +23,7 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const { login } = useAuthStore();
+  const login = useAuthStore((s) => s.login);
   const navigate = useNavigate();
   const location = useLocation();
   const locationState = location.state as { resetSuccess?: boolean; message?: string } | null;
@@ -56,7 +56,8 @@ export default function LoginPage() {
     setLoading(true);
     try {
       await login(email, password);
-      navigate('/');
+      const mustChange = useAuthStore.getState().user?.mustChangePassword;
+      navigate(mustChange ? '/account/change-password' : '/');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed');
     } finally {

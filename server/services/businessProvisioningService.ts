@@ -12,6 +12,7 @@ export interface ProvisionBusinessInput {
   planCode?: string;
   emailVerified?: boolean;
   mustSetPassword?: boolean;
+  mustChangePassword?: boolean;
 }
 
 export async function provisionBusinessWithOwner(
@@ -76,6 +77,7 @@ export async function provisionBusinessWithOwner(
       isActive: true,
       emailVerifiedAt: input.emailVerified ? new Date() : null,
       mustSetPassword: input.mustSetPassword ?? false,
+      mustChangePassword: input.mustChangePassword ?? false,
     },
   });
 

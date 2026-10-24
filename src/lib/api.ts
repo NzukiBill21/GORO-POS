@@ -115,6 +115,11 @@ class ApiClient {
     }
 
     if (!response.ok) {
+      if (response.status === 413) {
+        throw new Error(
+          'Upload is too large (max about 1.5 MB). Use a smaller workbook or remove unused sheets and images.'
+        );
+      }
       const error = (await response.json().catch(() => ({}))) as ApiErrorBody & { code?: string };
       if (response.status === 401) {
         this.onAuthFailure?.();

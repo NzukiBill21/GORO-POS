@@ -61,7 +61,7 @@ See `.env.example` section “Centrally hosted production”. Required:
 - [ ] `npm run smtp:verify` succeeds on **production** host
 - [ ] M-Pesa production credentials and callback/relay tested on a real sale
 - [ ] Server backups scheduled or cron `npm run backup:server` (see **Backups** below)
-- [ ] Excel template file added to `docs/templates/` if you rely on the named workbook (repo may ship docs only)
+- [ ] Excel template present: `docs/templates/GOROVIAN_Shop_Product_and_Stock_Template.xlsx` (mirrored under `public/templates/` for in-app download)
 
 ---
 
@@ -92,10 +92,11 @@ Document the backup directory path on your host (from server logs or `getBackupD
 
 ### Workflow
 
-1. **Products catalogue** — upload `.xlsx` → **Preview import** → fix row errors → **Confirm import**.
-2. **Opening stock** — same workbook (OPENING STOCK sheet) → preview → confirm (idempotent per session key; won’t double-apply stock on repeat confirm).
+1. **Download template** from the import dialog (or use your filled copy of `GOROVIAN_Shop_Product_and_Stock_Template.xlsx`).
+2. **Step 1 — Products catalogue** — upload → choose **Create only** (first import) or **Create and update** (refresh existing SKUs) → **Preview import** → fix errors (CSV report available) → **Confirm import**, or partial import if only some rows are valid.
+3. **Step 2 — Opening stock** — same workbook → preview ( heed double-stock warnings) → confirm. Re-confirming with the same confirmation id does not double-apply.
 
-Detailed columns: `docs/SHOP_ONBOARDING.md`.
+Detailed columns, modes, and limits: `docs/SHOP_ONBOARDING.md`.
 
 ### Parser accepts (PRODUCTS sheet headers, case-insensitive)
 
@@ -107,9 +108,10 @@ Opening stock: **Product SKU** or **Variant SKU** or name + size/color, **Quanti
 
 ### Rules
 
-- Preview shows **row-level errors** before commit.
-- Commit does **not** silently overwrite existing products (import service uses create/upsert rules — review preview counts before confirm).
-- Use the client’s **real** workbook only; keep mock files for dev/test tenants.
+- Preview shows **row-level errors** before commit; warnings (e.g. empty category, zero price) do not block import.
+- **Create only** skips existing SKUs without failing the batch; **Create and update** requires `products.edit` and updates matched lines.
+- Partial import commits only rows that passed validation; fix rejected rows in Excel and preview again.
+- Use the client’s **real** workbook only; keep `GOROVIAN_POS_Mock_*` files for dev/test tenants only.
 
 ---
 

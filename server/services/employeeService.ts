@@ -1,4 +1,4 @@
-import { hashPasswordUnsafe } from '../lib/password.js';
+import { hashPasswordUnsafe, validatePasswordComplexity } from '../lib/password.js';
 import { prisma } from '../lib/prisma.js';
 import { PaginationParams, paginateResult, skipTake } from '../lib/pagination.js';
 import { logActivity } from '../lib/audit.js';
@@ -76,6 +76,9 @@ export class EmployeeService {
     const existing = await prisma.user.findUnique({ where: { email: data.email } });
     if (existing) throw new AppError('Email already in use');
 
+    const complexity = validatePasswordComplexity(data.password);
+    if (!complexity.valid) throw new AppError(complexity.errors.join('. '), 400);
+
     const passwordHash = await hashPasswordUnsafe(data.password);
     const pinHash = data.pin ? await hashPasswordUnsafe(data.pin) : undefined;
     const { resolveBranchIdForBusiness } = await import('../lib/branchContext.js');
@@ -91,6 +94,9 @@ export class EmployeeService {
         branchId,
         phone: data.phone,
         pin: pinHash,
+        emailVerifiedAt: new Date(),
+        mustSetPassword: false,
+        mustChangePassword: true,
       },
       include: { role: true, branch: { select: { name: true } } },
     });

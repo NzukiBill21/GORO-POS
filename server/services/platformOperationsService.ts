@@ -327,10 +327,59 @@ export async function createTenantWithOwner(params: {
   planCode?: string;
   platformUserId: string;
   ipAddress?: string;
+  /** Local provision: skip email invite; owner signs in with temp password and must change it. */
+  ownerInitialPassword?: string;
 }) {
   const email = params.ownerEmail.trim().toLowerCase();
   const existing = await prisma.user.findUnique({ where: { email } });
   if (existing) throw new AppError('Owner email already in use', 409);
+
+  const localPassword = params.ownerInitialPassword?.trim();
+  if (localPassword) {
+    const { isLocalTenantProvisioningEnabled } = await import('../lib/localProvisioning.js');
+    const { validatePasswordComplexity } = await import('../lib/password.js');
+    if (!isLocalTenantProvisioningEnabled()) {
+      throw new AppError(
+        'Local owner provisioning is disabled. Use email invitation or set ALLOW_LOCAL_TENANT_PROVISION=true for desktop installs.',
+        403,
+        'LOCAL_PROVISION_DISABLED'
+      );
+    }
+    const complexity = validatePasswordComplexity(localPassword);
+    if (!complexity.valid) throw new AppError(complexity.errors.join('. '), 400);
+
+    const ownerPasswordHash = await hashPasswordUnsafe(localPassword);
+    const result = await prisma.$transaction(async (tx) =>
+      provisionBusinessWithOwner(tx, {
+        businessName: params.businessName,
+        ownerEmail: email,
+        ownerFirstName: params.ownerFirstName,
+        ownerLastName: params.ownerLastName,
+        ownerPasswordHash,
+        planCode: params.planCode ?? 'REGULAR',
+        emailVerified: true,
+        mustSetPassword: false,
+        mustChangePassword: true,
+      })
+    );
+
+    await writePlatformAuditLog({
+      platformUserId: params.platformUserId,
+      action: 'TENANT_CREATE',
+      targetBusinessId: result.businessId,
+      details: `Created tenant ${params.businessName} owner ${email} (local temp password)`,
+      ipAddress: params.ipAddress,
+    });
+
+    return {
+      businessId: result.businessId,
+      ownerId: result.ownerId,
+      ownerEmail: email,
+      invitation: null,
+      message:
+        'Tenant created. Give the owner their email and temporary password — they must change it on first sign-in.',
+    };
+  }
 
   const placeholderHash = await hashPasswordUnsafe(generateSecureToken(32));
 

@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { authenticate } from '../middleware/auth.js';
+import { authenticate, authenticateAllowPasswordChange } from '../middleware/auth.js';
 import { requirePermission } from '../middleware/permissions.js';
 import { validate } from '../middleware/validate.js';
 import { authRateLimit, strictRateLimit } from '../middleware/rateLimit.js';
@@ -33,12 +33,12 @@ authRouter.post('/refresh', authRateLimit, validate(refreshSchema), asyncHandler
   res.json(result);
 }));
 
-authRouter.post('/logout', authenticate, asyncHandler(async (req, res) => {
+authRouter.post('/logout', authenticateAllowPasswordChange, asyncHandler(async (req, res) => {
   await logout(req.user!.sessionId, req.user!.userId, req);
   res.json({ success: true });
 }));
 
-authRouter.get('/me', authenticate, asyncHandler(async (req, res) => {
+authRouter.get('/me', authenticateAllowPasswordChange, asyncHandler(async (req, res) => {
   const user = await getMe(req.user!.userId);
   res.json(user);
 }));
@@ -58,7 +58,7 @@ authRouter.post('/password-reset/confirm', strictRateLimit, validate(passwordRes
   res.json(result);
 }));
 
-authRouter.post('/change-password', authenticate, validate(changePasswordSchema), asyncHandler(async (req, res) => {
+authRouter.post('/change-password', authenticateAllowPasswordChange, validate(changePasswordSchema), asyncHandler(async (req, res) => {
   const result = await changePassword(req.user!.userId, req.body.currentPassword, req.body.newPassword, req);
   res.json(result);
 }));

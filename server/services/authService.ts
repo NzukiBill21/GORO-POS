@@ -206,6 +206,7 @@ export async function login(email: string, password: string, req: Request) {
       avatar: user.avatar,
       permissions,
       currency: user.business.currency,
+      mustChangePassword: user.mustChangePassword,
     },
   };
 }
@@ -273,6 +274,7 @@ export async function refreshAccessToken(refreshToken: string, sessionId: string
       branchName: user.branch?.name,
       permissions,
       currency: user.business.currency,
+      mustChangePassword: user.mustChangePassword,
     },
   };
 }
@@ -426,7 +428,12 @@ export async function changePassword(userId: string, currentPassword: string, ne
   await bumpUserTokenVersion(userId);
   await prisma.user.update({
     where: { id: userId },
-    data: { passwordHash, passwordChangedAt: new Date(), mustSetPassword: false },
+    data: {
+      passwordHash,
+      passwordChangedAt: new Date(),
+      mustSetPassword: false,
+      mustChangePassword: false,
+    },
   });
 
   await terminateUserSessions(userId);
@@ -491,6 +498,7 @@ export async function getMe(userId: string) {
     permissions,
     currency: user.business.currency,
     mustSetPassword: user.mustSetPassword,
+    mustChangePassword: user.mustChangePassword,
     emailVerified: Boolean(user.emailVerifiedAt),
     isBillingOwner: user.business.billingOwnerUserId === user.id,
     onboarding: checklist,

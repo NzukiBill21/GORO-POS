@@ -15,7 +15,13 @@ declare global {
   }
 }
 
-export async function authenticate(req: Request, res: Response, next: NextFunction) {
+type AuthenticateOptions = {
+  /** Allow access while mustChangePassword is set (password change / me / logout only). */
+  allowPendingPasswordChange?: boolean;
+};
+
+function createAuthenticate(options: AuthenticateOptions = {}) {
+  return async (req: Request, res: Response, next: NextFunction) => {
   const authHeader = req.headers.authorization;
   if (!authHeader?.startsWith('Bearer ')) {
     return res.status(401).json({ error: 'Authentication required' });
@@ -64,6 +70,13 @@ export async function authenticate(req: Request, res: Response, next: NextFuncti
       });
     }
 
+    if (user.mustChangePassword && !options.allowPendingPasswordChange) {
+      return res.status(403).json({
+        error: 'Change your temporary password before using the app.',
+        code: 'PASSWORD_CHANGE_REQUIRED',
+      });
+    }
+
     if (user.forceLogoutAt && user.forceLogoutAt > session.createdAt) {
       await prisma.session.update({ where: { id: session.id }, data: { isActive: false } });
       return res.status(401).json({ error: 'Session terminated' });
@@ -98,7 +111,12 @@ export async function authenticate(req: Request, res: Response, next: NextFuncti
   } catch {
     return res.status(401).json({ error: 'Invalid or expired token' });
   }
+  };
 }
+
+export const authenticate = createAuthenticate();
+/** Auth routes only — me, logout, change-password while temp password is active. */
+export const authenticateAllowPasswordChange = createAuthenticate({ allowPendingPasswordChange: true });
 
 export function requirePermission(...permissions: string[]) {
   return (req: Request, res: Response, next: NextFunction) => {

@@ -504,7 +504,7 @@ export default function EmployeesPage() {
             <DialogDescription>
               {editing
                 ? 'Update employee details and role.'
-                : 'Leave password blank to email an invitation — they set their own password before signing in.'}
+                : 'Set a temporary password for local sign-in (required on first login), or leave password blank to send an email invitation instead.'}
             </DialogDescription>
           </DialogHeader>
 

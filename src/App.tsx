@@ -32,6 +32,7 @@ const PlatformBillingPage = lazy(() => import('@/pages/platform/PlatformBillingP
 const SetupWizardPage = lazy(() => import('@/pages/SetupWizardPage'));
 const RegisterBusinessPage = lazy(() => import('@/pages/RegisterBusinessPage'));
 const AcceptInvitePage = lazy(() => import('@/pages/AcceptInvitePage'));
+const RequiredPasswordChangePage = lazy(() => import('@/pages/RequiredPasswordChangePage'));
 const DiagnosticsPage = lazy(() => import('@/pages/DiagnosticsPage'));
 
 const queryClient = new QueryClient({
@@ -54,12 +55,29 @@ function PageLoader() {
 }
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, accessToken, authReady } = useAuthStore();
+  const { isAuthenticated, accessToken, authReady, user } = useAuthStore();
   if (!authReady) {
     return <PageLoader />;
   }
   if (!isAuthenticated || !accessToken) {
     return <Navigate to="/login" replace />;
+  }
+  if (user?.mustChangePassword) {
+    return <Navigate to="/account/change-password" replace />;
+  }
+  return <>{children}</>;
+}
+
+function PasswordChangeRoute({ children }: { children: React.ReactNode }) {
+  const { isAuthenticated, accessToken, authReady, user } = useAuthStore();
+  if (!authReady) {
+    return <PageLoader />;
+  }
+  if (!isAuthenticated || !accessToken) {
+    return <Navigate to="/login" replace />;
+  }
+  if (!user?.mustChangePassword) {
+    return <Navigate to="/" replace />;
   }
   return <>{children}</>;
 }
@@ -87,6 +105,14 @@ function AppRoutes() {
         <Route path="/setup" element={<SetupWizardPage />} />
         <Route path="/register" element={<RegisterBusinessPage />} />
         <Route path="/accept-invite" element={<AcceptInvitePage />} />
+        <Route
+          path="/account/change-password"
+          element={
+            <PasswordChangeRoute>
+              <RequiredPasswordChangePage />
+            </PasswordChangeRoute>
+          }
+        />
         <Route path="/platform/login" element={<PlatformLoginPage />} />
         <Route path="/platform/billing" element={<PlatformBillingPage />} />
         <Route

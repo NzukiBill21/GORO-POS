@@ -13,6 +13,7 @@ interface User {
   branchName?: string;
   avatar?: string;
   permissions?: string[];
+  mustChangePassword?: boolean;
 }
 
 interface LoginResponse {

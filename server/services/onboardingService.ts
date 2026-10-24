@@ -457,6 +457,7 @@ export async function acceptInvitation(input: {
       data: {
         passwordHash,
         mustSetPassword: false,
+        mustChangePassword: false,
         passwordChangedAt: new Date(),
         emailVerifiedAt: invite.user.emailVerifiedAt ?? new Date(),
       },
